@@ -1,6 +1,7 @@
 import cv2
 from ultralytics import YOLO
 
+
 # Only keep these object classes from YOLO detections
 ALLOWED_CLASSES = {
     "bottle",
@@ -13,10 +14,10 @@ ALLOWED_CLASSES = {
 
 
 def main():
-    # Load pretrained YOLO model (will auto-download if not present)
+    # Load pretrained YOLO model
     model = YOLO("yolov8n.pt")
-    
-    # Open webcam (0 = default camera)
+
+    # Open webcam
     cap = cv2.VideoCapture(0)
 
     if not cap.isOpened():
@@ -32,43 +33,39 @@ def main():
             print("Error: Could not read frame.")
             break
 
-        # Run YOLO inference on the frame
+        # Run YOLO inference
         results = model(frame, verbose=False)
-
-        # Get first result (one frame → one result)
         result = results[0]
 
-        # Store only boxes we care about
         filtered_boxes = []
-        
-        # Mapping from class_id → class_name
         names = result.names
 
-        # Loop through detected boxes
+        # Store object counts here
+        counts = {}
+
+        # Filter detections and count allowed classes
         if result.boxes is not None:
             for box in result.boxes:
-                class_id = int(box.cls[0])     # numeric class id
-                class_name = names[class_id]   # convert to name
+                class_id = int(box.cls[0])
+                class_name = names[class_id]
 
-                # Keep only allowed classes
                 if class_name in ALLOWED_CLASSES:
                     filtered_boxes.append(box)
+                    counts[class_name] = counts.get(class_name, 0) + 1
 
-        # Copy original frame to draw on
+        # Copy frame for drawing
         annotated_frame = frame.copy()
 
-        # Draw filtered boxes manually
+        # Draw filtered boxes
         for box in filtered_boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])    # bounding box coords
-            confidence = float(box.conf[0])           # confidence score
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            confidence = float(box.conf[0])
             class_id = int(box.cls[0])
             class_name = names[class_id]
 
             label = f"{class_name} {confidence:.2f}"
 
-            # Draw rectangle
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            # Draw label text
             cv2.putText(
                 annotated_frame,
                 label,
@@ -78,14 +75,40 @@ def main():
                 (0, 255, 0),
                 2,
             )
-        # Show the result frame
+
+        # Draw live counts in top-left corner
+        y_offset = 30
+        cv2.putText(
+            annotated_frame,
+            "Detected objects:",
+            (10, y_offset),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 0),
+            2,
+        )
+
+        for class_name, count in counts.items():
+            y_offset += 30
+            text = f"{class_name}: {count}"
+            cv2.putText(
+                annotated_frame,
+                text,
+                (10, y_offset),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2,
+            )
+
+        # Show result
         cv2.imshow("Desk Object Detector", annotated_frame)
-        
-        # Press 'q' to exit loop
+
+        # Quit on q
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
-    
-    # Release resources          
+
+    # Clean up
     cap.release()
     cv2.destroyAllWindows()
 
